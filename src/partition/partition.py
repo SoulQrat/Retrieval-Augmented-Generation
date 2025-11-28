@@ -4,14 +4,14 @@ class TextPartition():
     def __init__(self, max_len: int=512, overlap_len: int=None, split_words: bool=False):
         self.max_len = max_len
         self.overlap_len = max_len // 2 if overlap_len is None else overlap_len
-        self.spilt_words = split_words
+        self.split_words = split_words
         self.levels = ["\n\n", "\n", " ", ""]
 
     def _overlap_split(self, text: str, level: int, partition: List[str]):
         tmp = text.split(self.levels[level])
         split = []
         for part in tmp:
-            if len(part) >= self.overlap_len:
+            if len(part) > self.overlap_len - 1:
                 for i in range(0, len(part), self.overlap_len - 1):
                     split.append(part[i: i + self.overlap_len - 1])
             else:
@@ -42,7 +42,7 @@ class TextPartition():
                     len_overlap += len(split[j]) + len(self.levels[level])
                     j -= 1
                 k = self.overlap_len - len_overlap
-                if k > 0 and j >= 0 and self.spilt_words:
+                if k > 0 and j >= 0 and self.split_words:
                     overlap.append(split[j][len(split[j]) - k:])
 
                     
@@ -61,7 +61,7 @@ class TextPartition():
         else:
             self._overlap_split(text, level, partition)
 
-    def spilt(self, text: str):
+    def split(self, text: str):
         partition = []
         self._recursive_split(text, 0, partition)
         return partition
