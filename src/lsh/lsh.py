@@ -1,35 +1,33 @@
-import torch
-import torch.nn.functional as F
-
+import numpy as np
 from typing import List
+from src.utils import cosine_similarity
 
-class LSH():
+class LSH:
     def __init__(self, L: int, k: int, embed_dim: int):
         self.L = L
         self.k = k
         self.embed_dim = embed_dim
-        self.hash_functions = torch.rand(size=(self.L, self.k, embed_dim))
+        self.hash_functions = np.random.rand(self.L, self.k, embed_dim)
         self.data = [{} for _ in range(self.L)]
 
-    def add(self, obj: torch.tensor) -> None:
+    def _get_hash(self, obj: np.ndarray, hash_function: np.ndarray) -> tuple:
+        hash = [0 for _ in range(self.k)]
+        for i, v in enumerate(hash_function):
+            hash[i] = 1 if cosine_similarity(v, obj) >= 0 else 0
+        return tuple(hash)
+
+    def add(self, obj: np.ndarray) -> None:
         for i, hash_function in enumerate(self.hash_functions):
-            hash = [0 for _ in range(self.k)]
-            for j, v in enumerate(hash_function):
-                if F.cosine_similarity(v, obj, dim=0).item() >= 0:
-                    hash[j] = 1
-            hash = tuple(hash)
-            self.data[i][hash] = self.data[i].get(hash, [])
+            hash = self._get_hash(obj, hash_function)
+            if hash not in self.data[i]:
+                self.data[i][hash] = []
             self.data[i][hash].append(obj)
 
-    def find(self, obj: torch.tensor, n: int=1) -> List[torch.tensor]:
+    def find(self, obj: np.ndarray, n: int = 1) -> List[np.ndarray]:
         neighbours = []
         for i, hash_function in enumerate(self.hash_functions):
-            hash = [0 for _ in range(self.k)]
-            for j, v in enumerate(hash_function):
-                if F.cosine_similarity(v, obj, dim=0).item() >= 0:
-                    hash[j] = 1
-            hash = tuple(hash)
+            hash = self._get_hash(obj, hash_function)
             neighbours.extend(self.data[i].get(hash, []))
-        dist = [tuple([-F.cosine_similarity(neighbour, obj, dim=0).item(), i]) for i, neighbour in enumerate(neighbours)]
-        dist = sorted(dist)[:n]
-        return [neighbours[i] for _, i in dist]
+        dist = [-cosine_similarity(neighbour, obj) for neighbour in neighbours]
+        dist = np.argsort(dist)[:n]
+        return [neighbours[i] for i in dist]
