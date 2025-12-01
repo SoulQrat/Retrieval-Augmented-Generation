@@ -52,14 +52,17 @@ class DataBase():
                 self.embedings_cnt += 1
                 self.lsh.add(embedding)
 
-    def find(self, query: str, k: int=1, n: int=5):
+    def find(self, query: str, k: int=1, get_dist: bool=False):
         split = self.partition.split(query)
         embeddings = self.encoder.encode(split)
         results = set()
         for embedding in embeddings:
-            neighbours = self.lsh.find(embedding, n=n)
+            neighbours, dist = self.lsh.find(embedding, n=5, get_dist=True)
             for neighbour in neighbours:
                 embedding_id = self.embedings_ids[tuple(neighbour)]
                 text_id = self.text_ids[embedding_id]
                 results.add(text_id)
-        return [self.dataset[i] for i in results][:k]
+        results = list(results)[:k]
+        if get_dist:
+            return [{**self.dataset[results[i]], 'dist': dist[i]} for i in range(len(results))]
+        return [self.dataset[i] for i in results]

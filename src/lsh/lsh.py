@@ -23,11 +23,13 @@ class LSH:
                 self.data[i][hash] = []
             self.data[i][hash].append(obj)
 
-    def find(self, obj: np.ndarray, n: int = 1) -> List[np.ndarray]:
+    def find(self, obj: np.ndarray, n: int = 1, get_dist: bool=False) -> List[np.ndarray]:
         neighbours = []
         for i, hash_function in enumerate(self.hash_functions):
             hash = self._get_hash(obj, hash_function)
             neighbours.extend(self.data[i].get(hash, []))
         dist = [-cosine_similarity(neighbour, obj) for neighbour in neighbours]
-        dist = np.argsort(dist)[:n]
-        return [neighbours[i] for i in dist]
+        idx = np.argsort(dist)[:n]
+        if get_dist:
+            return [neighbours[i] for i in idx], [-dist[i] for i in idx]
+        return [neighbours[i] for i in idx]
