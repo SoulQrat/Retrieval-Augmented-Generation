@@ -32,4 +32,4 @@ class LSH:
         idx = np.argsort(dist)[:n]
         if get_dist:
             return [neighbours[i] for i in idx], [-dist[i] for i in idx]
-        return [neighbours[i] for i in idx]
+        return [neighbours[i] for i in idx]        

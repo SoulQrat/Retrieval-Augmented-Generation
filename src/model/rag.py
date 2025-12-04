@@ -1,4 +1,3 @@
-import numpy as np
 import torch.nn as nn
 from typing import DefaultDict
 from src.utils import WebSearcher
@@ -28,7 +27,6 @@ class RAGModel(nn.Module):
             "Не добавляй лишнего, используй только информацию из текста."
             "За правильный ответ ты получишь 5000 долларов!\n"
         )
-
 
         messages = [
             {"role": "system", "content": prompt},
@@ -60,12 +58,6 @@ class RAGModel(nn.Module):
             }
         except Exception:
             return None
-        
-    def test(self, query: str):
-        page = self.searcher.search(query)
-        if page['text'] is None:
-            return None, None
-        return page['text'], self._web_preprocess(page['text']), page['source']
 
     def _get_recipes(self, query: str):
         recipes = []
@@ -97,7 +89,9 @@ class RAGModel(nn.Module):
                         f"Инструкция по приготовлению: {recipe['text']}\n"
                         f"КОНЕЦ РЕЦЕПТА {i}"
                     )
-                    logs.append({'name': recipe['name'], 'dist': 66, 'source': page['source']})
+                    text = "\n\n".join([recipe["name"], recipe["ingredients"], recipe["text"]])
+                    dist = self.database.get_dist(query, text)
+                    logs.append({'name': recipe['name'], 'dist': dist, 'source': page['source']})
                     if self.at_least_one:
                         i = 28
                 i += 1
