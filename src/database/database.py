@@ -1,8 +1,7 @@
-from datasets import Dataset
-from src.lsh import LSH
-from src.partition import TextPartition
 import pickle
 from tqdm import tqdm
+from datasets import Dataset
+from src.utils import LSH, TextPartition
 
 class EmbededDataset():
     def __init__(self, encoder, dataset: Dataset, partition: TextPartition):
