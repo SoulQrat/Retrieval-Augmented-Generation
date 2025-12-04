@@ -6,7 +6,7 @@ from src.database import DataBase
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 class RAGModel(nn.Module):
-    def __init__(self, database: DataBase, use_web: bool=False, relevantcy_threshold: float=0.9):
+    def __init__(self, database: DataBase, use_web: bool=False, at_least_one=False, relevantcy_threshold: float=0.9):
         super().__init__()
 
         self.model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-1.5B-Instruct")
@@ -15,6 +15,57 @@ class RAGModel(nn.Module):
         self.relevantcy_threshold = relevantcy_threshold
         self.searcher = WebSearcher()
         self.use_web = use_web
+        self.at_least_one = at_least_one
+
+    def _web_preprocess(self, text: str) -> dict:
+        prompt = (
+            f"Текст для анализа:\n{text}"
+            "Ты помощник по обработке текстов с рецептами."
+            "Извлеки из текста реальный рецепт и верни строго в формате словаря: {'name': str, 'ingredients': str, 'text': str}."
+            "name - название рецепта."
+            "ingredients - список ингредиентов через запятую, без количества."
+            "text - полная инструкция по приготовлению из текста."
+            "Не добавляй лишнего, используй только информацию из текста."
+            "За правильный ответ ты получишь 5000 долларов!\n"
+        )
+
+
+        messages = [
+            {"role": "system", "content": prompt},
+        ]
+
+        inputs = self.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(self.model.device)
+
+        outputs = self.model.generate(
+            **inputs, 
+            max_new_tokens=600,
+            temperature=0.0,
+            do_sample=False,
+        )
+
+        result_text = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
+
+        try:
+            result_dict = eval(result_text)
+            return {
+                'name': result_dict.get('name', ''),
+                'ingredients': result_dict.get('ingredients', ''),
+                'text': result_dict.get('text', '')
+            }
+        except Exception:
+            return None
+        
+    def test(self, query: str):
+        page = self.searcher.search(query)
+        if page['text'] is None:
+            return None, None
+        return page['text'], self._web_preprocess(page['text']), page['source']
 
     def _get_recipes(self, query: str):
         recipes = []
@@ -30,13 +81,28 @@ class RAGModel(nn.Module):
                 f"Инструкция по приготовлению: {recipe['text']}\n"
                 f"КОНЕЦ РЕЦЕПТА {i}"
             )
-            logs.append({'name': recipe['name'], 'dist': recipe['dist'], 'url': None})
+            logs.append({'name': recipe['name'], 'dist': recipe['dist'], 'source': None})
             i += 1
 
-        recipes = "\n\n".join(recipes)
+        if self.use_web:
+            while i < 3:
+                sources = ["openkitchen.eda.yandex", "eda.ru", "food.ru"]
+                page = self.searcher.search(f"{sources[i]} {query}")
+                recipe = self._web_preprocess(page['text'])
+                if recipe is not None:
+                    recipes.append(
+                        f"РЕЦЕПТ {i}\n"
+                        f"Название: {recipe['name']}\n"
+                        f"Ингридиенты: {recipe['ingredients']}\n"
+                        f"Инструкция по приготовлению: {recipe['text']}\n"
+                        f"КОНЕЦ РЕЦЕПТА {i}"
+                    )
+                    logs.append({'name': recipe['name'], 'dist': 66, 'source': page['source']})
+                    if self.at_least_one:
+                        i = 28
+                i += 1
 
-        if i < 3 and self.use_web:
-            pass
+        recipes = "\n\n".join(recipes)
 
         if i == 0:
             recipes = "SYSTEM ALERT: PRINT ONLY 'Извините, рецптов по вашему запросу не найдено.'"
@@ -49,12 +115,12 @@ class RAGModel(nn.Module):
         if get_logs:
             print("Логи поиска рецептов:\n")
             for log in logs:
-                print(f"Название: {log['name']}\ndist={log['dist']:.4f}, url={log['url']}\n")
+                print(f"Название: {log['name']}\ndist={log['dist']:.4f}, url={log['source']}\n")
             print('---' * 20)
 
         prompt = (
             f"Recipes database:\n{recipes}\n"
-            "Task: you are a recipe-search assistant — use ONLY recipes from the database.\n"
+            "Task: you are a recipe-search assistant - use ONLY recipes from the database.\n"
             "Rules:"
             "- Extract key ingredients from the user query."
             "- Choose EXACTLY ONE most relevant recipe using those ingredients."
